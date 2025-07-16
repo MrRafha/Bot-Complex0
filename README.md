@@ -30,8 +30,7 @@ Um bot para Discord que permite aos usuários adicionar objetivos, acompanhar o 
 
 ## Observações
 
-- O armazenamento dos objetivos e ranking é feito em memória (será perdido ao reiniciar o bot).
-- Para persistência, utilize um banco de dados.
+- funções futuras podem ser adicionadas então lembre-se de manter seu download atualizado.
 
 ---
 
