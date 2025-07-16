@@ -4,6 +4,7 @@ from discord.ext import commands
 from datetime import datetime, timedelta
 import os
 from dotenv import load_dotenv
+import sqlite3
 
 # Configura os intents necessários para o bot funcionar
 intents = discord.Intents.default()
@@ -38,8 +39,11 @@ async def scout(interaction: discord.Interaction, objetivo: str, mapa: str, temp
     try:
         hours, minutes = map(int, tempo.split(":"))
         unlock_time = datetime.now() + timedelta(hours=hours, minutes=minutes)
-        objectives.append(Objective(interaction.user, objetivo, mapa, unlock_time))
+        obj = Objective(interaction.user, objetivo, mapa, unlock_time)
+        objectives.append(obj)
+        save_objective(interaction.user, objetivo, mapa, unlock_time)
         user_counts[interaction.user.id] = user_counts.get(interaction.user.id, 0) + 1
+        save_user_count(interaction.user.id, user_counts[interaction.user.id])
         await interaction.response.send_message(
             f"Objetivo '{objetivo}' adicionado para o mapa '{mapa}' e será liberado em {tempo}.", ephemeral=True
         )
@@ -96,6 +100,8 @@ async def rr(interaction: discord.Interaction):
         await interaction.response.send_message("Você não tem permissão para resetar o ranking.", ephemeral=True)
         return
     user_counts.clear()
+    cursor.execute("DELETE FROM user_counts")
+    conn.commit()
     await interaction.response.send_message("Ranking resetado com sucesso.")
 
 # Evento chamado quando o bot está pronto
@@ -103,6 +109,66 @@ async def rr(interaction: discord.Interaction):
 async def on_ready():
     print(f"Bot conectado como {bot.user}")
     await tree.sync()  # Sincroniza os comandos slash com o Discord
+
+# Inicializa o banco de dados SQLite
+conn = sqlite3.connect("botdata.db")
+cursor = conn.cursor()
+
+# Cria as tabelas se não existirem
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS objectives (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    user_name TEXT,
+    name TEXT,
+    map_name TEXT,
+    unlock_time TEXT
+)
+""")
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS user_counts (
+    user_id INTEGER PRIMARY KEY,
+    count INTEGER
+)
+""")
+conn.commit()
+
+# Funções para salvar e carregar dados do banco de dados
+def save_objective(user, name, map_name, unlock_time):
+    cursor.execute(
+        "INSERT INTO objectives (user_id, user_name, name, map_name, unlock_time) VALUES (?, ?, ?, ?, ?)",
+        (user.id, user.display_name, name, map_name, unlock_time.isoformat())
+    )
+    conn.commit()
+
+def load_objectives():
+    cursor.execute("SELECT user_id, user_name, name, map_name, unlock_time FROM objectives")
+    rows = cursor.fetchall()
+    objs = []
+    for user_id, user_name, name, map_name, unlock_time in rows:
+        user = type("User", (), {"id": user_id, "display_name": user_name})()
+        objs.append(Objective(user, name, map_name, datetime.fromisoformat(unlock_time)))
+    return objs
+
+def clear_old_objectives():
+    cursor.execute("DELETE FROM objectives WHERE unlock_time < ?", (datetime.now().isoformat(),))
+    conn.commit()
+
+def save_user_count(user_id, count):
+    cursor.execute(
+        "INSERT INTO user_counts (user_id, count) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET count=?",
+        (user_id, count, count)
+    )
+    conn.commit()
+
+def load_user_counts():
+    cursor.execute("SELECT user_id, count FROM user_counts")
+    return dict(cursor.fetchall())
+
+# Carrega objetivos e contagem de usuários ao iniciar
+clear_old_objectives()
+objectives = load_objectives()
+user_counts = load_user_counts()
 
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
