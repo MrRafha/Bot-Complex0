@@ -35,4 +35,4 @@ Um bot para Discord que permite aos usuários adicionar objetivos, acompanhar o 
 
 ---
 
-Feito por [Seu Nome]
+Feito por Rafhael Hanry (ChampionOfPiaui)
